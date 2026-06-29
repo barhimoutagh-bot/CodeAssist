@@ -63,23 +63,22 @@ class MainActivity : ComponentActivity() {
 
         super.onCreate(savedInstanceState)
         inbound.value = extractStream(intent)
-        private var showAiDialog = mutableStateOf(false)
-        private var apiKey = mutableStateOf("")
-
 
         setContent {
+            // 🤖 تعريف متغيرات الـ AI لداخل ف الـ Compose Scope
+            val showAiDialog = remember { mutableStateOf(false) }
+            val apiKey = remember { mutableStateOf("") }
+
+            // تفعيل حوار الـ AI تلقائياً عند فتح التطبيق للتجربة والـ Test
+            LaunchedEffect(Unit) {
+                showAiDialog.value = true
+            }
+
             var backend by remember { mutableStateOf<IdeBackend?>(null) }
             var error by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(Unit) {
                 runCatching { withContext(Dispatchers.IO) { AndroidIde.bootstrap(applicationContext) } }.onSuccess { s ->
                         session = s; backend = s.backend
-                        // Phase-3a build-process-isolation proof (docs/build-process-isolation.md): bind the
-                        // :build daemon, open the first on-device project there, and run its default build in
-                        // that process — streaming state back over IPC. Verify via `adb logcat -s ide.daemon
-                        // ide.mem`. Started only AFTER bootstrap finishes so the main process provisions the
-                        // shared kotlinc-home/assets first and the daemon takes the no-delete fast path (a
-                        // concurrent first-run provision would race and corrupt the kotlinc-home). Debug-only +
-                        // flag-gated; replaced in Phase 3b by RemoteBuildRunner wired into the UI Run button.
                         if (BuildConfig.DEBUG && BuildDaemonProof.ENABLED) BuildDaemonProof.run(applicationContext)
                     }.onFailure { e -> error = e.message ?: e.toString() }
             }
@@ -91,9 +90,7 @@ class MainActivity : ComponentActivity() {
                     val b = backend
                     val target = pendingTarget
                     val created = if (b != null && target != null) uris.mapNotNull {
-                        importUri(
-                            it, target, b
-                        )
+                        importUri(it, target, b)
                     } else emptyList()
                     pendingCallback?.invoke(created)
                     pendingTarget = null; pendingCallback = null
@@ -105,7 +102,6 @@ class MainActivity : ComponentActivity() {
                     pendingPick?.invoke(path)
                     pendingPick = null
                 }
-            // "Save As" export: the user picks a destination (Files/Drive/Downloads); we copy the bytes there.
             var pendingExport by remember { mutableStateOf<String?>(null) }
             val exportLauncher =
                 rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
@@ -119,34 +115,18 @@ class MainActivity : ComponentActivity() {
                     override fun importInto(targetDir: String, onImported: (List<String>) -> Unit) {
                         pendingTarget = targetDir
                         pendingCallback = onImported
-                        importLauncher.launch(
-                            arrayOf(
-                                "text/*", "application/json", "application/xml", "*/*"
-                            )
-                        )
+                        importLauncher.launch(arrayOf("text/*", "application/json", "application/xml", "*/*"))
                     }
-
                     override val canPickFile: Boolean = true
-                    override fun pickFile(onPicked: (String?) -> Unit) {
-                        pendingPick = onPicked
-                        pickLauncher.launch(arrayOf("*/*"))
-                    }
-
+                    override fun pickFile(onPicked: (String?) -> Unit) { pendingPick = onPicked; pickLauncher.launch(arrayOf("*/*")) }
                     override val canShare: Boolean = true
                     override fun share(path: String) = shareFile(path)
-
                     override val canExport: Boolean = true
-                    override fun exportFile(path: String) {
-                        pendingExport = path
-                        exportLauncher.launch(File(path).name)
-                    }
-
+                    override fun exportFile(path: String) { pendingExport = path; exportLauncher.launch(File(path).name) }
                     override val canOpenUrl: Boolean = true
                     override fun openUrl(url: String) = openInBrowser(url)
-
                     override val canReveal: Boolean = true
                     override fun reveal(path: String) = openInFiles(path)
-
                     override val canInstallApk: Boolean = true
                     override fun installApk(path: String) = promptInstall(path)
                 }
@@ -158,13 +138,30 @@ class MainActivity : ComponentActivity() {
                 if (b != null && uri != null) {
                     val target = firstSourceRoot(b.files.fileTree())
                     val path = if (target != null) importUri(uri, target, b) else null
-                    Toast.makeText(
-                        this@MainActivity,
-                        if (path != null) "Imported ${File(path).name}" else "Couldn't import file",
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                    Toast.makeText(this@MainActivity, if (path != null) "Imported ${File(path).name}" else "Couldn't import file", Toast.LENGTH_SHORT).show()
                     inbound.value = null
                 }
+            }
+
+            // 🤖 رسم واجهة حوار الـ AI (AlertDialog) كـ عنصر Compose نقي ومقاد
+            if (showAiDialog.value) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showAiDialog.value = false },
+                    title = { androidx.compose.material3.Text("تفعيل CodeAssist Copilot 🤖", color = Color.White) },
+                    text = {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = apiKey.value,
+                            onValueChange = { apiKey.value = it },
+                            label = { androidx.compose.material3.Text("Gemini API Key") },
+                            singleLine = true
+                        )
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.Button(onClick = { showAiDialog.value = false }) {
+                            androidx.compose.material3.Text("ربط وتفعيل 🚀")
+                        }
+                    }
+                )
             }
 
             val b = backend
@@ -172,16 +169,8 @@ class MainActivity : ComponentActivity() {
                 b != null -> CodeAssistApp(
                     b,
                     fileActions = fileActions,
-                    // On-device Compose preview: render @Preview composables through the interpreter. The
-                    // backend instance is stable across project switches (it swaps services internally), so
-                    // one host suffices.
-                    composePreviewHost = (b as? IdeServicesBackend)?.let {
-                        AndroidComposePreviewHost(
-                            it
-                        )
-                    },
+                    composePreviewHost = (b as? IdeServicesBackend)?.let { AndroidComposePreviewHost(it) },
                 )
-
                 error != null -> Splash("Failed to start: $error")
                 else -> Splash("Starting CodeAssist…")
             }
@@ -196,11 +185,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Close the *active* engine (a project switch may have swapped it), not just the initial one.
         session?.backend?.close()
     }
 
-    /** Hand the APK at [path] to the system package installer (the OS install-confirmation UI). */
     private fun promptInstall(path: String) = runCatching {
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", File(path))
         val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -210,14 +197,12 @@ class MainActivity : ComponentActivity() {
         startActivity(intent)
     }.getOrElse { Toast.makeText(this, "Couldn't open the installer for ${File(path).name}", Toast.LENGTH_SHORT).show() }
 
-    /** Copy [uri]'s bytes into a new file under [targetDir]; returns the new path or null. */
     private fun importUri(uri: Uri, targetDir: String, backend: IdeBackend): String? = runCatching {
         val name = queryDisplayName(uri) ?: "imported-${System.currentTimeMillis()}"
         val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
         backend.files.createFileBytes(targetDir, name, bytes)
     }.getOrNull()
 
-    /** Copy a picked content:// file into the app cache and return its real path (for keystore import). */
     private fun copyUriToCache(uri: Uri): String? = runCatching {
         val name = queryDisplayName(uri) ?: "keystore-${System.currentTimeMillis()}"
         val dest = File(cacheDir, "picked-$name")
@@ -225,7 +210,6 @@ class MainActivity : ComponentActivity() {
         dest.absolutePath
     }.getOrNull()
 
-    /** Share [path] to another app via a FileProvider content:// URI (no FileUriExposedException). */
     private fun shareFile(path: String) = runCatching {
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", File(path))
         val send = Intent(Intent.ACTION_SEND).apply {
@@ -236,13 +220,11 @@ class MainActivity : ComponentActivity() {
         startActivity(Intent.createChooser(send, "Share ${File(path).name}"))
     }.getOrElse { Toast.makeText(this, "Can't share this file", Toast.LENGTH_SHORT).show() }
 
-    /** Copy [src]'s bytes into the user-chosen document [uri] (the "Save As"/export destination). */
     private fun exportTo(uri: Uri, src: String) = runCatching {
         contentResolver.openOutputStream(uri)?.use { out -> File(src).inputStream().use { it.copyTo(out) } }
         Toast.makeText(this, "Exported ${File(src).name}", Toast.LENGTH_SHORT).show()
     }.getOrElse { Toast.makeText(this, "Couldn't export file", Toast.LENGTH_SHORT).show() }
 
-    /** A best-effort content MIME type from the file extension (drives the share-sheet target list). */
     private fun mimeFor(path: String): String = when {
         path.endsWith(".apk") -> "application/vnd.android.package-archive"
         path.endsWith(".zip") || path.endsWith(".jar") -> "application/zip"
@@ -250,15 +232,8 @@ class MainActivity : ComponentActivity() {
         else -> "application/octet-stream"
     }
 
-    /**
-     * Open the system Files app on CodeAssist's storage (served by [ProjectsDocumentsProvider]) so the user
-     * can browse/manage there. Best-effort across OEM file managers: first tries to deep-link to [path]'s
-     * own directory (a document-URI VIEW — DocumentsUI honors it; our doc ids are absolute paths), then the
-     * provider root, then a generic Files launch, and finally explains where to look.
-     */
     private fun openInFiles(path: String?) {
         val auth = "$packageName.documents"
-        // Deep-link to the file's containing directory when we can (so "Open in Files" lands near the APK).
         val dirId = path?.let { p -> File(p).let { if (it.isDirectory) it else it.parentFile }?.absolutePath }
         val dirUri = dirId?.let { runCatching { DocumentsContract.buildDocumentUri(auth, it) }.getOrNull() }
         if (dirUri != null) {
@@ -271,30 +246,20 @@ class MainActivity : ComponentActivity() {
         val viewRoot = Intent(Intent.ACTION_VIEW).setDataAndType(rootUri, "vnd.android.document/root")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         if (runCatching { startActivity(viewRoot); true }.getOrDefault(false)) return
-        // Fall back to whatever handles the storage/Files browse action, else tell the user where to look.
         val browse = Intent("android.provider.action.BROWSE", rootUri)
         runCatching { startActivity(browse) }.getOrElse {
-            Toast.makeText(
-                this, "Open the Files app → CodeAssist to browse your projects", Toast.LENGTH_LONG
-            ).show()
+            Toast.makeText(this, "Open the Files app → CodeAssist to browse your projects", Toast.LENGTH_LONG).show()
         }
     }
 
-    /** Open [url] in the device browser (the Beta "Submit suggestions" action). */
     private fun openInBrowser(url: String) = runCatching {
-        startActivity(
-            Intent(
-                Intent.ACTION_VIEW, Uri.parse(url)
-            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
+        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }.getOrElse { Toast.makeText(this, "No app to open links", Toast.LENGTH_SHORT).show() }
 
     private fun queryDisplayName(uri: Uri): String? = runCatching {
         if (uri.scheme == "file") return uri.lastPathSegment
         contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-            ?.use { c ->
-                if (c.moveToFirst()) c.getString(0) else null
-            }
+            ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
     }.getOrNull()
 
     private fun extractStream(intent: Intent?): Uri? = when (intent?.action) {
@@ -304,14 +269,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Depth-first search for the first source root (a node carrying a source-root path) in the tree. */
 private fun firstSourceRoot(root: TreeNode): String? {
     root.sourceRootPath?.let { return it }
     for (child in root.children) firstSourceRoot(child)?.let { return it }
     return null
 }
 
-/** Minimal dark splash shown while the engine boots (before the themed UI is available). */
 @Composable
 private fun Splash(message: String) {
     Box(
