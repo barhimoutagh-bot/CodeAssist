@@ -63,6 +63,9 @@ class MainActivity : ComponentActivity() {
 
         super.onCreate(savedInstanceState)
         inbound.value = extractStream(intent)
+        private var showAiDialog = mutableStateOf(false)
+        private var apiKey = mutableStateOf("")
+
 
         setContent {
             var backend by remember { mutableStateOf<IdeBackend?>(null) }
