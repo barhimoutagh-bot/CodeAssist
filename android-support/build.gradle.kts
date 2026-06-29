@@ -20,8 +20,9 @@ dependencies {
     implementation(project(":index-api"))       // resource-declaration IndexExtension
     implementation(libs.ow2.asm)                 // ClassReader — scan the classpath for custom View subclasses (no class loading)
     implementation(libs.kotlinx.coroutines.core)
-    implementation("com.google.android.generativeai:generativeai:0.9.0")
-
+    
+    // التعديل الصحيح لهنا: تغيير الـ Group ID والإصدار لنسخة رسمية ومتاحة
+    implementation("com.google.ai.client.generativeai:generativeai:0.7.0")
 
     // D8 (r8) + apksigner (apksig) are invoked IN-PROCESS by the on-device wiring, so they're statically
     // linked where needed. Here they're compileOnly — the in-process impls compile against the API, but
