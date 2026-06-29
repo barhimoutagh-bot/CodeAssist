@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#111827"
+    android:padding="24dp"
+    android:gravity="center">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🤖"
+        android:textSize="70sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="تفعيل CodeAssist Copilot"
+        android:textColor="#ffffff"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:layout_marginTop="12dp" />
+
+    <EditText
+        android:id="@+id/etGeminiApiKey"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="30dp"
+        android:background="@android:drawable/edit_text"
+        android:hint="AI API Key (Gemini)..."
+        android:textColorHint="#6b7280"
+        android:textColor="#000000"
+        android:paddingHorizontal="12dp"
+        android:textSize="14sp"
+        android:singleLine="true"/>
+
+    <Button
+        android:id="@+id/btnSaveAndConnect"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="16dp"
+        android:backgroundTint="#3b82f6"
+        android:text="ربط وتفعيل 🚀"
+        android:textColor="#ffffff"
+        android:textStyle="bold" />
+
+</LinearLayout>
