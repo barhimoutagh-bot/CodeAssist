@@ -20,9 +20,6 @@ dependencies {
     implementation(project(":index-api"))       // resource-declaration IndexExtension
     implementation(libs.ow2.asm)                 // ClassReader — scan the classpath for custom View subclasses (no class loading)
     implementation(libs.kotlinx.coroutines.core)
-    
-    // التعديل الصحيح لهنا: تغيير الـ Group ID والإصدار لنسخة رسمية ومتاحة
-    implementation("com.google.ai.client.generativeai:generativeai:0.7.0")
 
     // D8 (r8) + apksigner (apksig) are invoked IN-PROCESS by the on-device wiring, so they're statically
     // linked where needed. Here they're compileOnly — the in-process impls compile against the API, but
@@ -34,6 +31,32 @@ dependencies {
     // by the hosts that produce bundles (:ide-android, :ide-desktop); here it is compileOnly + test. Its deps
     // are runtime-scoped in its POM, so guava (ImmutableList) must be added explicitly for compilation.
     compileOnly(libs.android.bundletool)
+    compileOnly(libs.guava)
+    // Bouncy Castle generates a keypair + self-signed cert for in-process keystore creation (no keytool on
+    // ART). compileOnly here (only KeystoreCrypto.create touches it); the launchers bundle it at runtime.
+    compileOnly(libs.bouncycastle.pkix)
+
+    // The end-to-end APK test compiles real Java (R.java + an Activity) through the JDT batch compiler
+    // (lang-jdt, now a main dependency) and exercises the in-process tools.
+    testImplementation(libs.kotlinx.coroutines.core)
+    testImplementation(libs.android.r8)
+    testImplementation(libs.android.apksig)
+    testImplementation(libs.android.bundletool)
+    testImplementation(libs.bouncycastle.pkix) // KeystoreCrypto.create round-trip test runs on the desktop JVM
+}
+
+// The core-library-desugaring test needs the desugar runtime + config jars as real files (L8 dexes the
+// runtime; D8/R8 read the config). Resolve them into a dedicated configuration and hand the paths to the
+// test JVM, so it does not depend on a particular Gradle-cache layout.
+val desugarLibTest: Configuration by configurations.creating { isCanBeConsumed = false }
+dependencies {
+    desugarLibTest(libs.desugar.jdk.libs)
+    desugarLibTest(libs.desugar.jdk.libs.configuration)
+}
+tasks.test {
+    val files = desugarLibTest
+    jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-Ddesugar.lib.path=${files.asPath}") })
+}
     compileOnly(libs.guava)
     // Bouncy Castle generates a keypair + self-signed cert for in-process keystore creation (no keytool on
     // ART). compileOnly here (only KeystoreCrypto.create touches it); the launchers bundle it at runtime.
